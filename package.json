@@ -1,0 +1,24 @@
+{
+  "name": "threejs-modelviewer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hrntsm/threejs-modelviewer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hrntsm/threejs-modelviewer/issues"
+  },
+  "homepage": "https://github.com/hrntsm/threejs-modelviewer#readme",
+  "dependencies": {
+    "rollup-plugin-node-resolve": "^5.2.0",
+    "three": "^0.128.0"
+  }
+}
