@@ -10,6 +10,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { IFCLoader } from "three/examples/jsm/loaders/IFCLoader";
+import { Rhino3dmLoader } from "three/examples/jsm/loaders/3DMLoader";
 
 const scene = new Scene();
 scene.background = new Color(0xaaaaaa);
@@ -66,16 +67,33 @@ window.addEventListener("resize", () => {
     renderer.setSize(size.width, size.height);
 });
 
+const rhino3dmLoader = new Rhino3dmLoader();
+rhino3dmLoader.setLibraryPath("libs/rhino3dm");
+
 const ifcLoader = new IFCLoader();
-ifcLoader.setWasmPath("wasm/");
+ifcLoader.setWasmPath("libs/web-ifc/");
 
 const input = document.getElementById("file-input");
+
 input.addEventListener(
     "change",
     (changed) => {
-        var ifcURL = URL.createObjectURL(changed.target.files[0]);
-        console.log(ifcURL);
-        ifcLoader.load(ifcURL, (geometry) => scene.add(geometry));
+        var ext = getExt(input.files[0].name).toLowerCase();
+        var modelURL = URL.createObjectURL(changed.target.files[0]);
+
+        if (ext === "ifc") {
+            console.log(modelURL);
+            ifcLoader.load(modelURL, (geometry) => scene.add(geometry));
+        }
+        else if (ext === "3dm") {
+            rhino3dmLoader.load(modelURL, (geometry) => scene.add(geometry), false, false);
+        }
     },
     false
 );
+
+function getExt(filename) {
+    var pos = filename.lastIndexOf('.');
+    if (pos === -1) return '';
+    return filename.slice(pos + 1);
+}

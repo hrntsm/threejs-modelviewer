@@ -9288,6 +9288,24 @@ function arrayMax( array ) {
 
 }
 
+const TYPED_ARRAYS = {
+	Int8Array: Int8Array,
+	Uint8Array: Uint8Array,
+	Uint8ClampedArray: Uint8ClampedArray,
+	Int16Array: Int16Array,
+	Uint16Array: Uint16Array,
+	Int32Array: Int32Array,
+	Uint32Array: Uint32Array,
+	Float32Array: Float32Array,
+	Float64Array: Float64Array
+};
+
+function getTypedArray( type, buffer ) {
+
+	return new TYPED_ARRAYS[ type ]( buffer );
+
+}
+
 let _id = 0;
 
 const _m1 = new /*@__PURE__*/ Matrix4();
@@ -25506,6 +25524,232 @@ InterleavedBufferAttribute.prototype.isInterleavedBufferAttribute = true;
 /**
  * parameters = {
  *  color: <hex>,
+ *  map: new THREE.Texture( <Image> ),
+ *  alphaMap: new THREE.Texture( <Image> ),
+ *  rotation: <float>,
+ *  sizeAttenuation: <bool>
+ * }
+ */
+
+class SpriteMaterial extends Material {
+
+	constructor( parameters ) {
+
+		super();
+
+		this.type = 'SpriteMaterial';
+
+		this.color = new Color( 0xffffff );
+
+		this.map = null;
+
+		this.alphaMap = null;
+
+		this.rotation = 0;
+
+		this.sizeAttenuation = true;
+
+		this.transparent = true;
+
+		this.setValues( parameters );
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.color.copy( source.color );
+
+		this.map = source.map;
+
+		this.alphaMap = source.alphaMap;
+
+		this.rotation = source.rotation;
+
+		this.sizeAttenuation = source.sizeAttenuation;
+
+		return this;
+
+	}
+
+}
+
+SpriteMaterial.prototype.isSpriteMaterial = true;
+
+let _geometry;
+
+const _intersectPoint = /*@__PURE__*/ new Vector3();
+const _worldScale = /*@__PURE__*/ new Vector3();
+const _mvPosition = /*@__PURE__*/ new Vector3();
+
+const _alignedPosition = /*@__PURE__*/ new Vector2();
+const _rotatedPosition = /*@__PURE__*/ new Vector2();
+const _viewWorldMatrix = /*@__PURE__*/ new Matrix4();
+
+const _vA = /*@__PURE__*/ new Vector3();
+const _vB = /*@__PURE__*/ new Vector3();
+const _vC = /*@__PURE__*/ new Vector3();
+
+const _uvA = /*@__PURE__*/ new Vector2();
+const _uvB = /*@__PURE__*/ new Vector2();
+const _uvC = /*@__PURE__*/ new Vector2();
+
+class Sprite extends Object3D {
+
+	constructor( material ) {
+
+		super();
+
+		this.type = 'Sprite';
+
+		if ( _geometry === undefined ) {
+
+			_geometry = new BufferGeometry();
+
+			const float32Array = new Float32Array( [
+				- 0.5, - 0.5, 0, 0, 0,
+				0.5, - 0.5, 0, 1, 0,
+				0.5, 0.5, 0, 1, 1,
+				- 0.5, 0.5, 0, 0, 1
+			] );
+
+			const interleavedBuffer = new InterleavedBuffer( float32Array, 5 );
+
+			_geometry.setIndex( [ 0, 1, 2,	0, 2, 3 ] );
+			_geometry.setAttribute( 'position', new InterleavedBufferAttribute( interleavedBuffer, 3, 0, false ) );
+			_geometry.setAttribute( 'uv', new InterleavedBufferAttribute( interleavedBuffer, 2, 3, false ) );
+
+		}
+
+		this.geometry = _geometry;
+		this.material = ( material !== undefined ) ? material : new SpriteMaterial();
+
+		this.center = new Vector2( 0.5, 0.5 );
+
+	}
+
+	raycast( raycaster, intersects ) {
+
+		if ( raycaster.camera === null ) {
+
+			console.error( 'THREE.Sprite: "Raycaster.camera" needs to be set in order to raycast against sprites.' );
+
+		}
+
+		_worldScale.setFromMatrixScale( this.matrixWorld );
+
+		_viewWorldMatrix.copy( raycaster.camera.matrixWorld );
+		this.modelViewMatrix.multiplyMatrices( raycaster.camera.matrixWorldInverse, this.matrixWorld );
+
+		_mvPosition.setFromMatrixPosition( this.modelViewMatrix );
+
+		if ( raycaster.camera.isPerspectiveCamera && this.material.sizeAttenuation === false ) {
+
+			_worldScale.multiplyScalar( - _mvPosition.z );
+
+		}
+
+		const rotation = this.material.rotation;
+		let sin, cos;
+
+		if ( rotation !== 0 ) {
+
+			cos = Math.cos( rotation );
+			sin = Math.sin( rotation );
+
+		}
+
+		const center = this.center;
+
+		transformVertex( _vA.set( - 0.5, - 0.5, 0 ), _mvPosition, center, _worldScale, sin, cos );
+		transformVertex( _vB.set( 0.5, - 0.5, 0 ), _mvPosition, center, _worldScale, sin, cos );
+		transformVertex( _vC.set( 0.5, 0.5, 0 ), _mvPosition, center, _worldScale, sin, cos );
+
+		_uvA.set( 0, 0 );
+		_uvB.set( 1, 0 );
+		_uvC.set( 1, 1 );
+
+		// check first triangle
+		let intersect = raycaster.ray.intersectTriangle( _vA, _vB, _vC, false, _intersectPoint );
+
+		if ( intersect === null ) {
+
+			// check second triangle
+			transformVertex( _vB.set( - 0.5, 0.5, 0 ), _mvPosition, center, _worldScale, sin, cos );
+			_uvB.set( 0, 1 );
+
+			intersect = raycaster.ray.intersectTriangle( _vA, _vC, _vB, false, _intersectPoint );
+			if ( intersect === null ) {
+
+				return;
+
+			}
+
+		}
+
+		const distance = raycaster.ray.origin.distanceTo( _intersectPoint );
+
+		if ( distance < raycaster.near || distance > raycaster.far ) return;
+
+		intersects.push( {
+
+			distance: distance,
+			point: _intersectPoint.clone(),
+			uv: Triangle.getUV( _intersectPoint, _vA, _vB, _vC, _uvA, _uvB, _uvC, new Vector2() ),
+			face: null,
+			object: this
+
+		} );
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		if ( source.center !== undefined ) this.center.copy( source.center );
+
+		this.material = source.material;
+
+		return this;
+
+	}
+
+}
+
+Sprite.prototype.isSprite = true;
+
+function transformVertex( vertexPosition, mvPosition, center, scale, sin, cos ) {
+
+	// compute position in camera space
+	_alignedPosition.subVectors( vertexPosition, center ).addScalar( 0.5 ).multiply( scale );
+
+	// to check if rotation is not zero
+	if ( sin !== undefined ) {
+
+		_rotatedPosition.x = ( cos * _alignedPosition.x ) - ( sin * _alignedPosition.y );
+		_rotatedPosition.y = ( sin * _alignedPosition.x ) + ( cos * _alignedPosition.y );
+
+	} else {
+
+		_rotatedPosition.copy( _alignedPosition );
+
+	}
+
+
+	vertexPosition.copy( mvPosition );
+	vertexPosition.x += _rotatedPosition.x;
+	vertexPosition.y += _rotatedPosition.y;
+
+	// transform to world space
+	vertexPosition.applyMatrix4( _viewWorldMatrix );
+
+}
+
+/**
+ * parameters = {
+ *  color: <hex>,
  *  opacity: <float>,
  *
  *  linewidth: <float>,
@@ -25854,6 +26098,441 @@ class LineSegments extends Line {
 }
 
 LineSegments.prototype.isLineSegments = true;
+
+/**
+ * parameters = {
+ *  color: <hex>,
+ *  opacity: <float>,
+ *  map: new THREE.Texture( <Image> ),
+ *  alphaMap: new THREE.Texture( <Image> ),
+ *
+ *  size: <float>,
+ *  sizeAttenuation: <bool>
+ *
+ *  morphTargets: <bool>
+ * }
+ */
+
+class PointsMaterial extends Material {
+
+	constructor( parameters ) {
+
+		super();
+
+		this.type = 'PointsMaterial';
+
+		this.color = new Color( 0xffffff );
+
+		this.map = null;
+
+		this.alphaMap = null;
+
+		this.size = 1;
+		this.sizeAttenuation = true;
+
+		this.morphTargets = false;
+
+		this.setValues( parameters );
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.color.copy( source.color );
+
+		this.map = source.map;
+
+		this.alphaMap = source.alphaMap;
+
+		this.size = source.size;
+		this.sizeAttenuation = source.sizeAttenuation;
+
+		this.morphTargets = source.morphTargets;
+
+		return this;
+
+	}
+
+}
+
+PointsMaterial.prototype.isPointsMaterial = true;
+
+const _inverseMatrix = /*@__PURE__*/ new Matrix4();
+const _ray = /*@__PURE__*/ new Ray();
+const _sphere = /*@__PURE__*/ new Sphere();
+const _position$2 = /*@__PURE__*/ new Vector3();
+
+class Points extends Object3D {
+
+	constructor( geometry = new BufferGeometry(), material = new PointsMaterial() ) {
+
+		super();
+
+		this.type = 'Points';
+
+		this.geometry = geometry;
+		this.material = material;
+
+		this.updateMorphTargets();
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.material = source.material;
+		this.geometry = source.geometry;
+
+		return this;
+
+	}
+
+	raycast( raycaster, intersects ) {
+
+		const geometry = this.geometry;
+		const matrixWorld = this.matrixWorld;
+		const threshold = raycaster.params.Points.threshold;
+		const drawRange = geometry.drawRange;
+
+		// Checking boundingSphere distance to ray
+
+		if ( geometry.boundingSphere === null ) geometry.computeBoundingSphere();
+
+		_sphere.copy( geometry.boundingSphere );
+		_sphere.applyMatrix4( matrixWorld );
+		_sphere.radius += threshold;
+
+		if ( raycaster.ray.intersectsSphere( _sphere ) === false ) return;
+
+		//
+
+		_inverseMatrix.copy( matrixWorld ).invert();
+		_ray.copy( raycaster.ray ).applyMatrix4( _inverseMatrix );
+
+		const localThreshold = threshold / ( ( this.scale.x + this.scale.y + this.scale.z ) / 3 );
+		const localThresholdSq = localThreshold * localThreshold;
+
+		if ( geometry.isBufferGeometry ) {
+
+			const index = geometry.index;
+			const attributes = geometry.attributes;
+			const positionAttribute = attributes.position;
+
+			if ( index !== null ) {
+
+				const start = Math.max( 0, drawRange.start );
+				const end = Math.min( index.count, ( drawRange.start + drawRange.count ) );
+
+				for ( let i = start, il = end; i < il; i ++ ) {
+
+					const a = index.getX( i );
+
+					_position$2.fromBufferAttribute( positionAttribute, a );
+
+					testPoint( _position$2, a, localThresholdSq, matrixWorld, raycaster, intersects, this );
+
+				}
+
+			} else {
+
+				const start = Math.max( 0, drawRange.start );
+				const end = Math.min( positionAttribute.count, ( drawRange.start + drawRange.count ) );
+
+				for ( let i = start, l = end; i < l; i ++ ) {
+
+					_position$2.fromBufferAttribute( positionAttribute, i );
+
+					testPoint( _position$2, i, localThresholdSq, matrixWorld, raycaster, intersects, this );
+
+				}
+
+			}
+
+		} else {
+
+			console.error( 'THREE.Points.raycast() no longer supports THREE.Geometry. Use THREE.BufferGeometry instead.' );
+
+		}
+
+	}
+
+	updateMorphTargets() {
+
+		const geometry = this.geometry;
+
+		if ( geometry.isBufferGeometry ) {
+
+			const morphAttributes = geometry.morphAttributes;
+			const keys = Object.keys( morphAttributes );
+
+			if ( keys.length > 0 ) {
+
+				const morphAttribute = morphAttributes[ keys[ 0 ] ];
+
+				if ( morphAttribute !== undefined ) {
+
+					this.morphTargetInfluences = [];
+					this.morphTargetDictionary = {};
+
+					for ( let m = 0, ml = morphAttribute.length; m < ml; m ++ ) {
+
+						const name = morphAttribute[ m ].name || String( m );
+
+						this.morphTargetInfluences.push( 0 );
+						this.morphTargetDictionary[ name ] = m;
+
+					}
+
+				}
+
+			}
+
+		} else {
+
+			const morphTargets = geometry.morphTargets;
+
+			if ( morphTargets !== undefined && morphTargets.length > 0 ) {
+
+				console.error( 'THREE.Points.updateMorphTargets() does not support THREE.Geometry. Use THREE.BufferGeometry instead.' );
+
+			}
+
+		}
+
+	}
+
+}
+
+Points.prototype.isPoints = true;
+
+function testPoint( point, index, localThresholdSq, matrixWorld, raycaster, intersects, object ) {
+
+	const rayPointDistanceSq = _ray.distanceSqToPoint( point );
+
+	if ( rayPointDistanceSq < localThresholdSq ) {
+
+		const intersectPoint = new Vector3();
+
+		_ray.closestPointToPoint( point, intersectPoint );
+		intersectPoint.applyMatrix4( matrixWorld );
+
+		const distance = raycaster.ray.origin.distanceTo( intersectPoint );
+
+		if ( distance < raycaster.near || distance > raycaster.far ) return;
+
+		intersects.push( {
+
+			distance: distance,
+			distanceToRay: Math.sqrt( rayPointDistanceSq ),
+			point: intersectPoint,
+			index: index,
+			face: null,
+			object: object
+
+		} );
+
+	}
+
+}
+
+class CanvasTexture extends Texture {
+
+	constructor( canvas, mapping, wrapS, wrapT, magFilter, minFilter, format, type, anisotropy ) {
+
+		super( canvas, mapping, wrapS, wrapT, magFilter, minFilter, format, type, anisotropy );
+
+		this.needsUpdate = true;
+
+	}
+
+}
+
+CanvasTexture.prototype.isCanvasTexture = true;
+
+/**
+ * parameters = {
+ *  color: <hex>,
+ *  roughness: <float>,
+ *  metalness: <float>,
+ *  opacity: <float>,
+ *
+ *  map: new THREE.Texture( <Image> ),
+ *
+ *  lightMap: new THREE.Texture( <Image> ),
+ *  lightMapIntensity: <float>
+ *
+ *  aoMap: new THREE.Texture( <Image> ),
+ *  aoMapIntensity: <float>
+ *
+ *  emissive: <hex>,
+ *  emissiveIntensity: <float>
+ *  emissiveMap: new THREE.Texture( <Image> ),
+ *
+ *  bumpMap: new THREE.Texture( <Image> ),
+ *  bumpScale: <float>,
+ *
+ *  normalMap: new THREE.Texture( <Image> ),
+ *  normalMapType: THREE.TangentSpaceNormalMap,
+ *  normalScale: <Vector2>,
+ *
+ *  displacementMap: new THREE.Texture( <Image> ),
+ *  displacementScale: <float>,
+ *  displacementBias: <float>,
+ *
+ *  roughnessMap: new THREE.Texture( <Image> ),
+ *
+ *  metalnessMap: new THREE.Texture( <Image> ),
+ *
+ *  alphaMap: new THREE.Texture( <Image> ),
+ *
+ *  envMap: new THREE.CubeTexture( [posx, negx, posy, negy, posz, negz] ),
+ *  envMapIntensity: <float>
+ *
+ *  refractionRatio: <float>,
+ *
+ *  wireframe: <boolean>,
+ *  wireframeLinewidth: <float>,
+ *
+ *  skinning: <bool>,
+ *  morphTargets: <bool>,
+ *  morphNormals: <bool>,
+ *
+ *  flatShading: <bool>
+ * }
+ */
+
+class MeshStandardMaterial extends Material {
+
+	constructor( parameters ) {
+
+		super();
+
+		this.defines = { 'STANDARD': '' };
+
+		this.type = 'MeshStandardMaterial';
+
+		this.color = new Color( 0xffffff ); // diffuse
+		this.roughness = 1.0;
+		this.metalness = 0.0;
+
+		this.map = null;
+
+		this.lightMap = null;
+		this.lightMapIntensity = 1.0;
+
+		this.aoMap = null;
+		this.aoMapIntensity = 1.0;
+
+		this.emissive = new Color( 0x000000 );
+		this.emissiveIntensity = 1.0;
+		this.emissiveMap = null;
+
+		this.bumpMap = null;
+		this.bumpScale = 1;
+
+		this.normalMap = null;
+		this.normalMapType = TangentSpaceNormalMap;
+		this.normalScale = new Vector2( 1, 1 );
+
+		this.displacementMap = null;
+		this.displacementScale = 1;
+		this.displacementBias = 0;
+
+		this.roughnessMap = null;
+
+		this.metalnessMap = null;
+
+		this.alphaMap = null;
+
+		this.envMap = null;
+		this.envMapIntensity = 1.0;
+
+		this.refractionRatio = 0.98;
+
+		this.wireframe = false;
+		this.wireframeLinewidth = 1;
+		this.wireframeLinecap = 'round';
+		this.wireframeLinejoin = 'round';
+
+		this.skinning = false;
+		this.morphTargets = false;
+		this.morphNormals = false;
+
+		this.flatShading = false;
+
+		this.vertexTangents = false;
+
+		this.setValues( parameters );
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.defines = { 'STANDARD': '' };
+
+		this.color.copy( source.color );
+		this.roughness = source.roughness;
+		this.metalness = source.metalness;
+
+		this.map = source.map;
+
+		this.lightMap = source.lightMap;
+		this.lightMapIntensity = source.lightMapIntensity;
+
+		this.aoMap = source.aoMap;
+		this.aoMapIntensity = source.aoMapIntensity;
+
+		this.emissive.copy( source.emissive );
+		this.emissiveMap = source.emissiveMap;
+		this.emissiveIntensity = source.emissiveIntensity;
+
+		this.bumpMap = source.bumpMap;
+		this.bumpScale = source.bumpScale;
+
+		this.normalMap = source.normalMap;
+		this.normalMapType = source.normalMapType;
+		this.normalScale.copy( source.normalScale );
+
+		this.displacementMap = source.displacementMap;
+		this.displacementScale = source.displacementScale;
+		this.displacementBias = source.displacementBias;
+
+		this.roughnessMap = source.roughnessMap;
+
+		this.metalnessMap = source.metalnessMap;
+
+		this.alphaMap = source.alphaMap;
+
+		this.envMap = source.envMap;
+		this.envMapIntensity = source.envMapIntensity;
+
+		this.refractionRatio = source.refractionRatio;
+
+		this.wireframe = source.wireframe;
+		this.wireframeLinewidth = source.wireframeLinewidth;
+		this.wireframeLinecap = source.wireframeLinecap;
+		this.wireframeLinejoin = source.wireframeLinejoin;
+
+		this.skinning = source.skinning;
+		this.morphTargets = source.morphTargets;
+		this.morphNormals = source.morphNormals;
+
+		this.flatShading = source.flatShading;
+
+		this.vertexTangents = source.vertexTangents;
+
+		return this;
+
+	}
+
+}
+
+MeshStandardMaterial.prototype.isMeshStandardMaterial = true;
 
 /**
  * parameters = {
@@ -26927,6 +27606,258 @@ class LightShadow {
 
 }
 
+class SpotLightShadow extends LightShadow {
+
+	constructor() {
+
+		super( new PerspectiveCamera( 50, 1, 0.5, 500 ) );
+
+		this.focus = 1;
+
+	}
+
+	updateMatrices( light ) {
+
+		const camera = this.camera;
+
+		const fov = RAD2DEG * 2 * light.angle * this.focus;
+		const aspect = this.mapSize.width / this.mapSize.height;
+		const far = light.distance || camera.far;
+
+		if ( fov !== camera.fov || aspect !== camera.aspect || far !== camera.far ) {
+
+			camera.fov = fov;
+			camera.aspect = aspect;
+			camera.far = far;
+			camera.updateProjectionMatrix();
+
+		}
+
+		super.updateMatrices( light );
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.focus = source.focus;
+
+		return this;
+
+	}
+
+}
+
+SpotLightShadow.prototype.isSpotLightShadow = true;
+
+class SpotLight extends Light {
+
+	constructor( color, intensity, distance = 0, angle = Math.PI / 3, penumbra = 0, decay = 1 ) {
+
+		super( color, intensity );
+
+		this.type = 'SpotLight';
+
+		this.position.copy( Object3D.DefaultUp );
+		this.updateMatrix();
+
+		this.target = new Object3D();
+
+		this.distance = distance;
+		this.angle = angle;
+		this.penumbra = penumbra;
+		this.decay = decay; // for physically correct lights, should be 2.
+
+		this.shadow = new SpotLightShadow();
+
+	}
+
+	get power() {
+
+		// intensity = power per solid angle.
+		// ref: equation (17) from https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+		return this.intensity * Math.PI;
+
+	}
+
+	set power( power ) {
+
+		// intensity = power per solid angle.
+		// ref: equation (17) from https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+		this.intensity = power / Math.PI;
+
+	}
+
+	dispose() {
+
+		this.shadow.dispose();
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.distance = source.distance;
+		this.angle = source.angle;
+		this.penumbra = source.penumbra;
+		this.decay = source.decay;
+
+		this.target = source.target.clone();
+
+		this.shadow = source.shadow.clone();
+
+		return this;
+
+	}
+
+}
+
+SpotLight.prototype.isSpotLight = true;
+
+const _projScreenMatrix = /*@__PURE__*/ new Matrix4();
+const _lightPositionWorld = /*@__PURE__*/ new Vector3();
+const _lookTarget = /*@__PURE__*/ new Vector3();
+
+class PointLightShadow extends LightShadow {
+
+	constructor() {
+
+		super( new PerspectiveCamera( 90, 1, 0.5, 500 ) );
+
+		this._frameExtents = new Vector2( 4, 2 );
+
+		this._viewportCount = 6;
+
+		this._viewports = [
+			// These viewports map a cube-map onto a 2D texture with the
+			// following orientation:
+			//
+			//  xzXZ
+			//   y Y
+			//
+			// X - Positive x direction
+			// x - Negative x direction
+			// Y - Positive y direction
+			// y - Negative y direction
+			// Z - Positive z direction
+			// z - Negative z direction
+
+			// positive X
+			new Vector4( 2, 1, 1, 1 ),
+			// negative X
+			new Vector4( 0, 1, 1, 1 ),
+			// positive Z
+			new Vector4( 3, 1, 1, 1 ),
+			// negative Z
+			new Vector4( 1, 1, 1, 1 ),
+			// positive Y
+			new Vector4( 3, 0, 1, 1 ),
+			// negative Y
+			new Vector4( 1, 0, 1, 1 )
+		];
+
+		this._cubeDirections = [
+			new Vector3( 1, 0, 0 ), new Vector3( - 1, 0, 0 ), new Vector3( 0, 0, 1 ),
+			new Vector3( 0, 0, - 1 ), new Vector3( 0, 1, 0 ), new Vector3( 0, - 1, 0 )
+		];
+
+		this._cubeUps = [
+			new Vector3( 0, 1, 0 ), new Vector3( 0, 1, 0 ), new Vector3( 0, 1, 0 ),
+			new Vector3( 0, 1, 0 ), new Vector3( 0, 0, 1 ),	new Vector3( 0, 0, - 1 )
+		];
+
+	}
+
+	updateMatrices( light, viewportIndex = 0 ) {
+
+		const camera = this.camera;
+		const shadowMatrix = this.matrix;
+
+		const far = light.distance || camera.far;
+
+		if ( far !== camera.far ) {
+
+			camera.far = far;
+			camera.updateProjectionMatrix();
+
+		}
+
+		_lightPositionWorld.setFromMatrixPosition( light.matrixWorld );
+		camera.position.copy( _lightPositionWorld );
+
+		_lookTarget.copy( camera.position );
+		_lookTarget.add( this._cubeDirections[ viewportIndex ] );
+		camera.up.copy( this._cubeUps[ viewportIndex ] );
+		camera.lookAt( _lookTarget );
+		camera.updateMatrixWorld();
+
+		shadowMatrix.makeTranslation( - _lightPositionWorld.x, - _lightPositionWorld.y, - _lightPositionWorld.z );
+
+		_projScreenMatrix.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse );
+		this._frustum.setFromProjectionMatrix( _projScreenMatrix );
+
+	}
+
+}
+
+PointLightShadow.prototype.isPointLightShadow = true;
+
+class PointLight extends Light {
+
+	constructor( color, intensity, distance = 0, decay = 1 ) {
+
+		super( color, intensity );
+
+		this.type = 'PointLight';
+
+		this.distance = distance;
+		this.decay = decay; // for physically correct lights, should be 2.
+
+		this.shadow = new PointLightShadow();
+
+	}
+
+	get power() {
+
+		// intensity = power per solid angle.
+		// ref: equation (15) from https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+		return this.intensity * 4 * Math.PI;
+
+	}
+
+	set power( power ) {
+
+		// intensity = power per solid angle.
+		// ref: equation (15) from https://seblagarde.files.wordpress.com/2015/07/course_notes_moving_frostbite_to_pbr_v32.pdf
+		this.intensity = power / ( 4 * Math.PI );
+
+	}
+
+	dispose() {
+
+		this.shadow.dispose();
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.distance = source.distance;
+		this.decay = source.decay;
+
+		this.shadow = source.shadow.clone();
+
+		return this;
+
+	}
+
+}
+
+PointLight.prototype.isPointLight = true;
+
 class OrthographicCamera extends Camera {
 
 	constructor( left = - 1, right = 1, top = 1, bottom = - 1, near = 0.1, far = 2000 ) {
@@ -27124,6 +28055,45 @@ class AmbientLight extends Light {
 
 AmbientLight.prototype.isAmbientLight = true;
 
+class RectAreaLight extends Light {
+
+	constructor( color, intensity, width = 10, height = 10 ) {
+
+		super( color, intensity );
+
+		this.type = 'RectAreaLight';
+
+		this.width = width;
+		this.height = height;
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.width = source.width;
+		this.height = source.height;
+
+		return this;
+
+	}
+
+	toJSON( meta ) {
+
+		const data = super.toJSON( meta );
+
+		data.object.width = this.width;
+		data.object.height = this.height;
+
+		return data;
+
+	}
+
+}
+
+RectAreaLight.prototype.isRectAreaLight = true;
+
 class LoaderUtils {
 
 	static decodeText( array ) {
@@ -27167,6 +28137,306 @@ class LoaderUtils {
 		if ( index === - 1 ) return './';
 
 		return url.substr( 0, index + 1 );
+
+	}
+
+}
+
+class InstancedBufferGeometry extends BufferGeometry {
+
+	constructor() {
+
+		super();
+
+		this.type = 'InstancedBufferGeometry';
+		this.instanceCount = Infinity;
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.instanceCount = source.instanceCount;
+
+		return this;
+
+	}
+
+	clone() {
+
+		return new this.constructor().copy( this );
+
+	}
+
+	toJSON() {
+
+		const data = super.toJSON( this );
+
+		data.instanceCount = this.instanceCount;
+
+		data.isInstancedBufferGeometry = true;
+
+		return data;
+
+	}
+
+}
+
+InstancedBufferGeometry.prototype.isInstancedBufferGeometry = true;
+
+class InstancedBufferAttribute extends BufferAttribute {
+
+	constructor( array, itemSize, normalized, meshPerAttribute ) {
+
+		if ( typeof ( normalized ) === 'number' ) {
+
+			meshPerAttribute = normalized;
+
+			normalized = false;
+
+			console.error( 'THREE.InstancedBufferAttribute: The constructor now expects normalized as the third argument.' );
+
+		}
+
+		super( array, itemSize, normalized );
+
+		this.meshPerAttribute = meshPerAttribute || 1;
+
+	}
+
+	copy( source ) {
+
+		super.copy( source );
+
+		this.meshPerAttribute = source.meshPerAttribute;
+
+		return this;
+
+	}
+
+	toJSON()	{
+
+		const data = super.toJSON();
+
+		data.meshPerAttribute = this.meshPerAttribute;
+
+		data.isInstancedBufferAttribute = true;
+
+		return data;
+
+	}
+
+}
+
+InstancedBufferAttribute.prototype.isInstancedBufferAttribute = true;
+
+class BufferGeometryLoader extends Loader {
+
+	constructor( manager ) {
+
+		super( manager );
+
+	}
+
+	load( url, onLoad, onProgress, onError ) {
+
+		const scope = this;
+
+		const loader = new FileLoader( scope.manager );
+		loader.setPath( scope.path );
+		loader.setRequestHeader( scope.requestHeader );
+		loader.setWithCredentials( scope.withCredentials );
+		loader.load( url, function ( text ) {
+
+			try {
+
+				onLoad( scope.parse( JSON.parse( text ) ) );
+
+			} catch ( e ) {
+
+				if ( onError ) {
+
+					onError( e );
+
+				} else {
+
+					console.error( e );
+
+				}
+
+				scope.manager.itemError( url );
+
+			}
+
+		}, onProgress, onError );
+
+	}
+
+	parse( json ) {
+
+		const interleavedBufferMap = {};
+		const arrayBufferMap = {};
+
+		function getInterleavedBuffer( json, uuid ) {
+
+			if ( interleavedBufferMap[ uuid ] !== undefined ) return interleavedBufferMap[ uuid ];
+
+			const interleavedBuffers = json.interleavedBuffers;
+			const interleavedBuffer = interleavedBuffers[ uuid ];
+
+			const buffer = getArrayBuffer( json, interleavedBuffer.buffer );
+
+			const array = getTypedArray( interleavedBuffer.type, buffer );
+			const ib = new InterleavedBuffer( array, interleavedBuffer.stride );
+			ib.uuid = interleavedBuffer.uuid;
+
+			interleavedBufferMap[ uuid ] = ib;
+
+			return ib;
+
+		}
+
+		function getArrayBuffer( json, uuid ) {
+
+			if ( arrayBufferMap[ uuid ] !== undefined ) return arrayBufferMap[ uuid ];
+
+			const arrayBuffers = json.arrayBuffers;
+			const arrayBuffer = arrayBuffers[ uuid ];
+
+			const ab = new Uint32Array( arrayBuffer ).buffer;
+
+			arrayBufferMap[ uuid ] = ab;
+
+			return ab;
+
+		}
+
+		const geometry = json.isInstancedBufferGeometry ? new InstancedBufferGeometry() : new BufferGeometry();
+
+		const index = json.data.index;
+
+		if ( index !== undefined ) {
+
+			const typedArray = getTypedArray( index.type, index.array );
+			geometry.setIndex( new BufferAttribute( typedArray, 1 ) );
+
+		}
+
+		const attributes = json.data.attributes;
+
+		for ( const key in attributes ) {
+
+			const attribute = attributes[ key ];
+			let bufferAttribute;
+
+			if ( attribute.isInterleavedBufferAttribute ) {
+
+				const interleavedBuffer = getInterleavedBuffer( json.data, attribute.data );
+				bufferAttribute = new InterleavedBufferAttribute( interleavedBuffer, attribute.itemSize, attribute.offset, attribute.normalized );
+
+			} else {
+
+				const typedArray = getTypedArray( attribute.type, attribute.array );
+				const bufferAttributeConstr = attribute.isInstancedBufferAttribute ? InstancedBufferAttribute : BufferAttribute;
+				bufferAttribute = new bufferAttributeConstr( typedArray, attribute.itemSize, attribute.normalized );
+
+			}
+
+			if ( attribute.name !== undefined ) bufferAttribute.name = attribute.name;
+			if ( attribute.usage !== undefined ) bufferAttribute.setUsage( attribute.usage );
+
+			if ( attribute.updateRange !== undefined ) {
+
+				bufferAttribute.updateRange.offset = attribute.updateRange.offset;
+				bufferAttribute.updateRange.count = attribute.updateRange.count;
+
+			}
+
+			geometry.setAttribute( key, bufferAttribute );
+
+		}
+
+		const morphAttributes = json.data.morphAttributes;
+
+		if ( morphAttributes ) {
+
+			for ( const key in morphAttributes ) {
+
+				const attributeArray = morphAttributes[ key ];
+
+				const array = [];
+
+				for ( let i = 0, il = attributeArray.length; i < il; i ++ ) {
+
+					const attribute = attributeArray[ i ];
+					let bufferAttribute;
+
+					if ( attribute.isInterleavedBufferAttribute ) {
+
+						const interleavedBuffer = getInterleavedBuffer( json.data, attribute.data );
+						bufferAttribute = new InterleavedBufferAttribute( interleavedBuffer, attribute.itemSize, attribute.offset, attribute.normalized );
+
+					} else {
+
+						const typedArray = getTypedArray( attribute.type, attribute.array );
+						bufferAttribute = new BufferAttribute( typedArray, attribute.itemSize, attribute.normalized );
+
+					}
+
+					if ( attribute.name !== undefined ) bufferAttribute.name = attribute.name;
+					array.push( bufferAttribute );
+
+				}
+
+				geometry.morphAttributes[ key ] = array;
+
+			}
+
+		}
+
+		const morphTargetsRelative = json.data.morphTargetsRelative;
+
+		if ( morphTargetsRelative ) {
+
+			geometry.morphTargetsRelative = true;
+
+		}
+
+		const groups = json.data.groups || json.data.drawcalls || json.data.offsets;
+
+		if ( groups !== undefined ) {
+
+			for ( let i = 0, n = groups.length; i !== n; ++ i ) {
+
+				const group = groups[ i ];
+
+				geometry.addGroup( group.start, group.count, group.materialIndex );
+
+			}
+
+		}
+
+		const boundingSphere = json.data.boundingSphere;
+
+		if ( boundingSphere !== undefined ) {
+
+			const center = new Vector3();
+
+			if ( boundingSphere.center !== undefined ) {
+
+				center.fromArray( boundingSphere.center );
+
+			}
+
+			geometry.boundingSphere = new Sphere( center, boundingSphere.radius );
+
+		}
+
+		if ( json.name ) geometry.name = json.name;
+		if ( json.userData ) geometry.userData = json.userData;
+
+		return geometry;
 
 	}
 
@@ -34943,6 +36213,1395 @@ class IFCLoader extends Loader {
 	}
 }
 
+const _taskCache = new WeakMap();
+
+class Rhino3dmLoader extends Loader {
+
+	constructor( manager ) {
+
+		super( manager );
+
+		this.libraryPath = '';
+		this.libraryPending = null;
+		this.libraryBinary = null;
+		this.libraryConfig = {};
+
+		this.url = '';
+
+		this.workerLimit = 4;
+		this.workerPool = [];
+		this.workerNextTaskID = 1;
+		this.workerSourceURL = '';
+		this.workerConfig = {};
+
+		this.materials = [];
+
+	}
+
+	setLibraryPath( path ) {
+
+		this.libraryPath = path;
+
+		return this;
+
+	}
+
+	setWorkerLimit( workerLimit ) {
+
+		this.workerLimit = workerLimit;
+
+		return this;
+
+	}
+
+	load( url, onLoad, onProgress, onError ) {
+
+		const loader = new FileLoader( this.manager );
+
+		loader.setPath( this.path );
+		loader.setResponseType( 'arraybuffer' );
+		loader.setRequestHeader( this.requestHeader );
+
+		this.url = url;
+
+		loader.load( url, ( buffer ) => {
+
+			// Check for an existing task using this buffer. A transferred buffer cannot be transferred
+			// again from this thread.
+			if ( _taskCache.has( buffer ) ) {
+
+				const cachedTask = _taskCache.get( buffer );
+
+				return cachedTask.promise.then( onLoad ).catch( onError );
+
+			}
+
+			this.decodeObjects( buffer, url )
+				.then( onLoad )
+				.catch( onError );
+
+		}, onProgress, onError );
+
+
+	}
+
+	debug() {
+
+		console.log( 'Task load: ', this.workerPool.map( ( worker ) => worker._taskLoad ) );
+
+	}
+
+	decodeObjects( buffer, url ) {
+
+		let worker;
+		let taskID;
+
+		const taskCost = buffer.byteLength;
+
+		const objectPending = this._getWorker( taskCost )
+			.then( ( _worker ) => {
+
+				worker = _worker;
+				taskID = this.workerNextTaskID ++; //hmmm
+
+				return new Promise( ( resolve, reject ) => {
+
+					worker._callbacks[ taskID ] = { resolve, reject };
+
+					worker.postMessage( { type: 'decode', id: taskID, buffer }, [ buffer ] );
+
+					//this.debug();
+
+				} );
+
+			} )
+			.then( ( message ) => this._createGeometry( message.data ) );
+
+		// Remove task from the task list.
+		// Note: replaced '.finally()' with '.catch().then()' block - iOS 11 support (#19416)
+		objectPending
+			.catch( () => true )
+			.then( () => {
+
+				if ( worker && taskID ) {
+
+					this._releaseTask( worker, taskID );
+
+					//this.debug();
+
+				}
+
+			} );
+
+		// Cache the task result.
+		_taskCache.set( buffer, {
+
+			url: url,
+			promise: objectPending
+
+		} );
+
+		return objectPending;
+
+	}
+
+	parse( data, onLoad, onError ) {
+
+		this.decodeObjects( data, '' )
+			.then( onLoad )
+			.catch( onError );
+
+	}
+
+	_compareMaterials( material ) {
+
+		const mat = {};
+		mat.name = material.name;
+		mat.color = {};
+		mat.color.r = material.color.r;
+		mat.color.g = material.color.g;
+		mat.color.b = material.color.b;
+		mat.type = material.type;
+
+		for ( let i = 0; i < this.materials.length; i ++ ) {
+
+			const m = this.materials[ i ];
+			const _mat = {};
+			_mat.name = m.name;
+			_mat.color = {};
+			_mat.color.r = m.color.r;
+			_mat.color.g = m.color.g;
+			_mat.color.b = m.color.b;
+			_mat.type = m.type;
+
+			if ( JSON.stringify( mat ) === JSON.stringify( _mat ) ) {
+
+				return m;
+
+			}
+
+		}
+
+		this.materials.push( material );
+
+		return material;
+
+	}
+
+	_createMaterial( material ) {
+
+		if ( material === undefined ) {
+
+			return new MeshStandardMaterial( {
+				color: new Color( 1, 1, 1 ),
+				metalness: 0.8,
+				name: 'default',
+				side: 2
+			} );
+
+		}
+
+		const _diffuseColor = material.diffuseColor;
+
+		const diffusecolor = new Color( _diffuseColor.r / 255.0, _diffuseColor.g / 255.0, _diffuseColor.b / 255.0 );
+
+		if ( _diffuseColor.r === 0 && _diffuseColor.g === 0 && _diffuseColor.b === 0 ) {
+
+			diffusecolor.r = 1;
+			diffusecolor.g = 1;
+			diffusecolor.b = 1;
+
+		}
+
+		// console.log( material );
+
+		const mat = new MeshStandardMaterial( {
+			color: diffusecolor,
+			name: material.name,
+			side: 2,
+			transparent: material.transparency > 0 ? true : false,
+			opacity: 1.0 - material.transparency
+		} );
+
+		const textureLoader = new TextureLoader();
+
+		for ( let i = 0; i < material.textures.length; i ++ ) {
+
+			const texture = material.textures[ i ];
+
+			if ( texture.image !== null ) {
+
+				const map = textureLoader.load( texture.image );
+
+				switch ( texture.type ) {
+
+					case 'Diffuse':
+
+						mat.map = map;
+
+						break;
+
+					case 'Bump':
+
+						mat.bumpMap = map;
+
+						break;
+
+					case 'Transparency':
+
+						mat.alphaMap = map;
+						mat.transparent = true;
+
+						break;
+
+					case 'Emap':
+
+						mat.envMap = map;
+
+						break;
+
+				}
+
+			}
+
+		}
+
+		return mat;
+
+	}
+
+	_createGeometry( data ) {
+
+		// console.log(data);
+
+		const object = new Object3D();
+		const instanceDefinitionObjects = [];
+		const instanceDefinitions = [];
+		const instanceReferences = [];
+
+		object.userData[ 'layers' ] = data.layers;
+		object.userData[ 'groups' ] = data.groups;
+		object.userData[ 'settings' ] = data.settings;
+		object.userData[ 'objectType' ] = 'File3dm';
+		object.userData[ 'materials' ] = null;
+		object.name = this.url;
+
+		let objects = data.objects;
+		const materials = data.materials;
+
+		for ( let i = 0; i < objects.length; i ++ ) {
+
+			const obj = objects[ i ];
+			const attributes = obj.attributes;
+
+			switch ( obj.objectType ) {
+
+				case 'InstanceDefinition':
+
+					instanceDefinitions.push( obj );
+
+					break;
+
+				case 'InstanceReference':
+
+					instanceReferences.push( obj );
+
+					break;
+
+				default:
+
+					let _object;
+
+					if ( attributes.materialIndex >= 0 ) {
+
+						const rMaterial = materials[ attributes.materialIndex ];
+						let material = this._createMaterial( rMaterial );
+						material = this._compareMaterials( material );
+						_object = this._createObject( obj, material );
+
+					} else {
+
+						const material = this._createMaterial( );
+						_object = this._createObject( obj, material );
+
+					}
+
+					if ( _object === undefined ) {
+
+						continue;
+
+					}
+
+					const layer = data.layers[ attributes.layerIndex ];
+
+					_object.visible = layer ? data.layers[ attributes.layerIndex ].visible : true;
+
+					if ( attributes.isInstanceDefinitionObject ) {
+
+						instanceDefinitionObjects.push( _object );
+
+					} else {
+
+						object.add( _object );
+
+					}
+
+					break;
+
+			}
+
+		}
+
+		for ( let i = 0; i < instanceDefinitions.length; i ++ ) {
+
+			const iDef = instanceDefinitions[ i ];
+
+			objects = [];
+
+			for ( let j = 0; j < iDef.attributes.objectIds.length; j ++ ) {
+
+				const objId = iDef.attributes.objectIds[ j ];
+
+				for ( let p = 0; p < instanceDefinitionObjects.length; p ++ ) {
+
+					const idoId = instanceDefinitionObjects[ p ].userData.attributes.id;
+
+					if ( objId === idoId ) {
+
+						objects.push( instanceDefinitionObjects[ p ] );
+
+					}
+
+				}
+
+			}
+
+			// Currently clones geometry and does not take advantage of instancing
+
+			for ( let j = 0; j < instanceReferences.length; j ++ ) {
+
+				const iRef = instanceReferences[ j ];
+
+				if ( iRef.geometry.parentIdefId === iDef.attributes.id ) {
+
+					const iRefObject = new Object3D();
+					const xf = iRef.geometry.xform.array;
+
+					const matrix = new Matrix4();
+          			matrix.set( xf[ 0 ], xf[ 1 ], xf[ 2 ], xf[ 3 ], xf[ 4 ], xf[ 5 ], xf[ 6 ], xf[ 7 ], xf[ 8 ], xf[ 9 ], xf[ 10 ], xf[ 11 ], xf[ 12 ], xf[ 13 ], xf[ 14 ], xf[ 15 ] );
+
+					iRefObject.applyMatrix4( matrix );
+
+					for ( let p = 0; p < objects.length; p ++ ) {
+
+						iRefObject.add( objects[ p ].clone( true ) );
+
+					}
+
+					object.add( iRefObject );
+
+				}
+
+			}
+
+		}
+
+		object.userData[ 'materials' ] = this.materials;
+		return object;
+
+	}
+
+	_createObject( obj, mat ) {
+
+		const loader = new BufferGeometryLoader();
+
+		const attributes = obj.attributes;
+
+		let geometry, material, _color, color;
+
+		switch ( obj.objectType ) {
+
+			case 'Point':
+			case 'PointSet':
+
+				geometry = loader.parse( obj.geometry );
+
+				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
+
+					material = new PointsMaterial( { vertexColors: true, sizeAttenuation: false, size: 2 } );
+
+				} else {
+
+					_color = attributes.drawColor;
+					color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 );
+					material = new PointsMaterial( { color: color, sizeAttenuation: false, size: 2 } );
+
+				}
+
+				material = this._compareMaterials( material );
+
+				const points = new Points( geometry, material );
+				points.userData[ 'attributes' ] = attributes;
+				points.userData[ 'objectType' ] = obj.objectType;
+
+				if ( attributes.name ) {
+
+					points.name = attributes.name;
+
+				}
+
+				return points;
+
+			case 'Mesh':
+			case 'Extrusion':
+			case 'SubD':
+			case 'Brep':
+
+				if ( obj.geometry === null ) return;
+
+				geometry = loader.parse( obj.geometry );
+
+				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
+
+					mat.vertexColors = true;
+
+				}
+
+				if ( mat === null ) {
+
+					mat = this._createMaterial();
+					mat = this._compareMaterials( mat );
+
+				}
+
+				const mesh = new Mesh( geometry, mat );
+				mesh.castShadow = attributes.castsShadows;
+				mesh.receiveShadow = attributes.receivesShadows;
+				mesh.userData[ 'attributes' ] = attributes;
+				mesh.userData[ 'objectType' ] = obj.objectType;
+
+				if ( attributes.name ) {
+
+					mesh.name = attributes.name;
+
+				}
+
+				return mesh;
+
+			case 'Curve':
+
+				geometry = loader.parse( obj.geometry );
+
+				_color = attributes.drawColor;
+				color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 );
+
+				material = new LineBasicMaterial( { color: color } );
+				material = this._compareMaterials( material );
+
+				const lines = new Line( geometry, material );
+				lines.userData[ 'attributes' ] = attributes;
+				lines.userData[ 'objectType' ] = obj.objectType;
+
+				if ( attributes.name ) {
+
+					lines.name = attributes.name;
+
+				}
+
+				return lines;
+
+			case 'TextDot':
+
+				geometry = obj.geometry;
+
+				const ctx = document.createElement( 'canvas' ).getContext( '2d' );
+				const font = `${geometry.fontHeight}px ${geometry.fontFace}`;
+				ctx.font = font;
+				const width = ctx.measureText( geometry.text ).width + 10;
+				const height = geometry.fontHeight + 10;
+
+				const r = window.devicePixelRatio;
+
+				ctx.canvas.width = width * r;
+				ctx.canvas.height = height * r;
+				ctx.canvas.style.width = width + 'px';
+				ctx.canvas.style.height = height + 'px';
+				ctx.setTransform( r, 0, 0, r, 0, 0 );
+
+				ctx.font = font;
+				ctx.textBaseline = 'middle';
+				ctx.textAlign = 'center';
+				color = attributes.drawColor;
+				ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${color.a})`;
+				ctx.fillRect( 0, 0, width, height );
+				ctx.fillStyle = 'white';
+				ctx.fillText( geometry.text, width / 2, height / 2 );
+
+				const texture = new CanvasTexture( ctx.canvas );
+				texture.minFilter = LinearFilter;
+				texture.wrapS = ClampToEdgeWrapping;
+				texture.wrapT = ClampToEdgeWrapping;
+
+				material = new SpriteMaterial( { map: texture, depthTest: false } );
+				const sprite = new Sprite( material );
+				sprite.position.set( geometry.point[ 0 ], geometry.point[ 1 ], geometry.point[ 2 ] );
+				sprite.scale.set( width / 10, height / 10, 1.0 );
+
+				sprite.userData[ 'attributes' ] = attributes;
+				sprite.userData[ 'objectType' ] = obj.objectType;
+
+				if ( attributes.name ) {
+
+					sprite.name = attributes.name;
+
+				}
+
+				return sprite;
+
+			case 'Light':
+
+				geometry = obj.geometry;
+
+				let light;
+
+				if ( geometry.isDirectionalLight ) {
+
+					light = new DirectionalLight();
+					light.castShadow = attributes.castsShadows;
+					light.position.set( geometry.location[ 0 ], geometry.location[ 1 ], geometry.location[ 2 ] );
+					light.target.position.set( geometry.direction[ 0 ], geometry.direction[ 1 ], geometry.direction[ 2 ] );
+					light.shadow.normalBias = 0.1;
+
+				} else if ( geometry.isPointLight ) {
+
+					light = new PointLight();
+					light.castShadow = attributes.castsShadows;
+					light.position.set( geometry.location[ 0 ], geometry.location[ 1 ], geometry.location[ 2 ] );
+					light.shadow.normalBias = 0.1;
+
+				} else if ( geometry.isRectangularLight ) {
+
+					light = new RectAreaLight();
+
+					const width = Math.abs( geometry.width[ 2 ] );
+					const height = Math.abs( geometry.length[ 0 ] );
+
+					light.position.set( geometry.location[ 0 ] - ( height / 2 ), geometry.location[ 1 ], geometry.location[ 2 ] - ( width / 2 ) );
+
+					light.height = height;
+					light.width = width;
+
+					light.lookAt( new Vector3( geometry.direction[ 0 ], geometry.direction[ 1 ], geometry.direction[ 2 ] ) );
+
+				} else if ( geometry.isSpotLight ) {
+
+					light = new SpotLight();
+					light.castShadow = attributes.castsShadows;
+					light.position.set( geometry.location[ 0 ], geometry.location[ 1 ], geometry.location[ 2 ] );
+					light.target.position.set( geometry.direction[ 0 ], geometry.direction[ 1 ], geometry.direction[ 2 ] );
+					light.angle = geometry.spotAngleRadians;
+					light.shadow.normalBias = 0.1;
+
+				} else if ( geometry.isLinearLight ) {
+
+					console.warn( 'THREE.3DMLoader:  No conversion exists for linear lights.' );
+
+					return;
+
+				}
+
+				if ( light ) {
+
+					light.intensity = geometry.intensity;
+					_color = geometry.diffuse;
+					color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 );
+					light.color = color;
+					light.userData[ 'attributes' ] = attributes;
+					light.userData[ 'objectType' ] = obj.objectType;
+
+				}
+
+				return light;
+
+		}
+
+	}
+
+	_initLibrary() {
+
+		if ( ! this.libraryPending ) {
+
+			// Load rhino3dm wrapper.
+			const jsLoader = new FileLoader( this.manager );
+			jsLoader.setPath( this.libraryPath );
+			const jsContent = new Promise( ( resolve, reject ) => {
+
+				jsLoader.load( 'rhino3dm.js', resolve, undefined, reject );
+
+			} );
+
+			// Load rhino3dm WASM binary.
+			const binaryLoader = new FileLoader( this.manager );
+			binaryLoader.setPath( this.libraryPath );
+			binaryLoader.setResponseType( 'arraybuffer' );
+			const binaryContent = new Promise( ( resolve, reject ) => {
+
+				binaryLoader.load( 'rhino3dm.wasm', resolve, undefined, reject );
+
+			} );
+
+			this.libraryPending = Promise.all( [ jsContent, binaryContent ] )
+				.then( ( [ jsContent, binaryContent ] ) => {
+
+					//this.libraryBinary = binaryContent;
+					this.libraryConfig.wasmBinary = binaryContent;
+
+					const fn = Rhino3dmWorker.toString();
+
+					const body = [
+						'/* rhino3dm.js */',
+						jsContent,
+						'/* worker */',
+						fn.substring( fn.indexOf( '{' ) + 1, fn.lastIndexOf( '}' ) )
+					].join( '\n' );
+
+					this.workerSourceURL = URL.createObjectURL( new Blob( [ body ] ) );
+
+				} );
+
+		}
+
+		return this.libraryPending;
+
+	}
+
+	_getWorker( taskCost ) {
+
+		return this._initLibrary().then( () => {
+
+			if ( this.workerPool.length < this.workerLimit ) {
+
+				const worker = new Worker( this.workerSourceURL );
+
+				worker._callbacks = {};
+				worker._taskCosts = {};
+				worker._taskLoad = 0;
+
+				worker.postMessage( {
+					type: 'init',
+					libraryConfig: this.libraryConfig
+				} );
+
+				worker.onmessage = function ( e ) {
+
+					const message = e.data;
+
+					switch ( message.type ) {
+
+						case 'decode':
+							worker._callbacks[ message.id ].resolve( message );
+							break;
+
+						case 'error':
+							worker._callbacks[ message.id ].reject( message );
+							break;
+
+						default:
+							console.error( 'THREE.Rhino3dmLoader: Unexpected message, "' + message.type + '"' );
+
+					}
+
+				};
+
+				this.workerPool.push( worker );
+
+			} else {
+
+				this.workerPool.sort( function ( a, b ) {
+
+					return a._taskLoad > b._taskLoad ? - 1 : 1;
+
+				} );
+
+			}
+
+			const worker = this.workerPool[ this.workerPool.length - 1 ];
+
+			worker._taskLoad += taskCost;
+
+			return worker;
+
+		} );
+
+	}
+
+	_releaseTask( worker, taskID ) {
+
+		worker._taskLoad -= worker._taskCosts[ taskID ];
+		delete worker._callbacks[ taskID ];
+		delete worker._taskCosts[ taskID ];
+
+	}
+
+	dispose() {
+
+		for ( let i = 0; i < this.workerPool.length; ++ i ) {
+
+			this.workerPool[ i ].terminate();
+
+		}
+
+		this.workerPool.length = 0;
+
+		return this;
+
+	}
+
+}
+
+/* WEB WORKER */
+
+function Rhino3dmWorker() {
+
+	let libraryPending;
+	let libraryConfig;
+	let rhino;
+
+	onmessage = function ( e ) {
+
+		const message = e.data;
+
+		switch ( message.type ) {
+
+			case 'init':
+
+				libraryConfig = message.libraryConfig;
+				const wasmBinary = libraryConfig.wasmBinary;
+				let RhinoModule;
+				libraryPending = new Promise( function ( resolve ) {
+
+					/* Like Basis Loader */
+					RhinoModule = { wasmBinary, onRuntimeInitialized: resolve };
+
+					rhino3dm( RhinoModule ); // eslint-disable-line no-undef
+
+				 } ).then( () => {
+
+					rhino = RhinoModule;
+
+				 } );
+
+				break;
+
+			case 'decode':
+
+				const buffer = message.buffer;
+				libraryPending.then( () => {
+
+					const data = decodeObjects( rhino, buffer );
+
+					self.postMessage( { type: 'decode', id: message.id, data } );
+
+				} );
+
+				break;
+
+		}
+
+	};
+
+	function decodeObjects( rhino, buffer ) {
+
+		const arr = new Uint8Array( buffer );
+		const doc = rhino.File3dm.fromByteArray( arr );
+
+		const objects = [];
+		const materials = [];
+		const layers = [];
+		const views = [];
+		const namedViews = [];
+		const groups = [];
+
+		//Handle objects
+
+		const objs = doc.objects();
+		const cnt = objs.count;
+
+		for ( let i = 0; i < cnt; i ++ ) {
+
+			const _object = objs.get( i );
+
+			const object = extractObjectData( _object, doc );
+
+			_object.delete();
+
+			if ( object ) {
+
+				objects.push( object );
+
+			}
+
+		}
+
+		// Handle instance definitions
+		// console.log( `Instance Definitions Count: ${doc.instanceDefinitions().count()}` );
+
+		for ( let i = 0; i < doc.instanceDefinitions().count(); i ++ ) {
+
+			const idef = doc.instanceDefinitions().get( i );
+			const idefAttributes = extractProperties( idef );
+			idefAttributes.objectIds = idef.getObjectIds();
+
+			objects.push( { geometry: null, attributes: idefAttributes, objectType: 'InstanceDefinition' } );
+
+		}
+
+		// Handle materials
+
+		const textureTypes = [
+			// rhino.TextureType.Bitmap,
+			rhino.TextureType.Diffuse,
+			rhino.TextureType.Bump,
+			rhino.TextureType.Transparency,
+			rhino.TextureType.Opacity,
+			rhino.TextureType.Emap
+		];
+
+		const pbrTextureTypes = [
+			rhino.TextureType.PBR_BaseColor,
+			rhino.TextureType.PBR_Subsurface,
+			rhino.TextureType.PBR_SubsurfaceScattering,
+			rhino.TextureType.PBR_SubsurfaceScatteringRadius,
+			rhino.TextureType.PBR_Metallic,
+			rhino.TextureType.PBR_Specular,
+			rhino.TextureType.PBR_SpecularTint,
+			rhino.TextureType.PBR_Roughness,
+			rhino.TextureType.PBR_Anisotropic,
+			rhino.TextureType.PBR_Anisotropic_Rotation,
+			rhino.TextureType.PBR_Sheen,
+			rhino.TextureType.PBR_SheenTint,
+			rhino.TextureType.PBR_Clearcoat,
+			rhino.TextureType.PBR_ClearcoatBump,
+			rhino.TextureType.PBR_ClearcoatRoughness,
+			rhino.TextureType.PBR_OpacityIor,
+			rhino.TextureType.PBR_OpacityRoughness,
+			rhino.TextureType.PBR_Emission,
+			rhino.TextureType.PBR_AmbientOcclusion,
+			rhino.TextureType.PBR_Displacement
+		];
+
+		for ( let i = 0; i < doc.materials().count(); i ++ ) {
+
+			const _material = doc.materials().get( i );
+			const _pbrMaterial = _material.physicallyBased();
+
+			let material = extractProperties( _material );
+
+			const textures = [];
+
+			for ( let j = 0; j < textureTypes.length; j ++ ) {
+
+				const _texture = _material.getTexture( textureTypes[ j ] );
+				if ( _texture ) {
+
+					let textureType = textureTypes[ j ].constructor.name;
+					textureType = textureType.substring( 12, textureType.length );
+					const texture = { type: textureType };
+
+					const image = doc.getEmbeddedFileAsBase64( _texture.fileName );
+
+					if ( image ) {
+
+						texture.image = 'data:image/png;base64,' + image;
+
+					} else {
+
+						console.warn( `THREE.3DMLoader: Image for ${textureType} texture not embedded in file.` );
+						texture.image = null;
+
+					}
+
+					textures.push( texture );
+
+					_texture.delete();
+
+				}
+
+			}
+
+			material.textures = textures;
+
+			if ( _pbrMaterial.supported ) {
+
+				console.log( 'pbr true' );
+
+				for ( let j = 0; j < pbrTextureTypes.length; j ++ ) {
+
+					const _texture = _material.getTexture( textureTypes[ j ] );
+					if ( _texture ) {
+
+						const image = doc.getEmbeddedFileAsBase64( _texture.fileName );
+						let textureType = textureTypes[ j ].constructor.name;
+						textureType = textureType.substring( 12, textureType.length );
+						const texture = { type: textureType, image: 'data:image/png;base64,' + image };
+						textures.push( texture );
+
+						_texture.delete();
+
+					}
+
+				}
+
+				const pbMaterialProperties = extractProperties( _material.physicallyBased() );
+
+				material = Object.assign( pbMaterialProperties, material );
+
+			}
+
+			materials.push( material );
+
+			_material.delete();
+			_pbrMaterial.delete();
+
+		}
+
+		// Handle layers
+
+		for ( let i = 0; i < doc.layers().count(); i ++ ) {
+
+			const _layer = doc.layers().get( i );
+			const layer = extractProperties( _layer );
+
+			layers.push( layer );
+
+			_layer.delete();
+
+		}
+
+		// Handle views
+
+		for ( let i = 0; i < doc.views().count(); i ++ ) {
+
+			const _view = doc.views().get( i );
+			const view = extractProperties( _view );
+
+			views.push( view );
+
+			_view.delete();
+
+		}
+
+		// Handle named views
+
+		for ( let i = 0; i < doc.namedViews().count(); i ++ ) {
+
+			const _namedView = doc.namedViews().get( i );
+			const namedView = extractProperties( _namedView );
+
+			namedViews.push( namedView );
+
+			_namedView.delete();
+
+		}
+
+		// Handle groups
+
+		for ( let i = 0; i < doc.groups().count(); i ++ ) {
+
+			const _group = doc.groups().get( i );
+			const group = extractProperties( _group );
+
+			groups.push( group );
+
+			_group.delete();
+
+		}
+
+		// Handle settings
+
+		const settings = extractProperties( doc.settings() );
+
+		//TODO: Handle other document stuff like dimstyles, instance definitions, bitmaps etc.
+
+		// Handle dimstyles
+		// console.log( `Dimstyle Count: ${doc.dimstyles().count()}` );
+
+		// Handle bitmaps
+		// console.log( `Bitmap Count: ${doc.bitmaps().count()}` );
+
+		// Handle strings -- this seems to be broken at the moment in rhino3dm
+		// console.log( `Document Strings Count: ${doc.strings().count()}` );
+
+		/*
+		for( var i = 0; i < doc.strings().count(); i++ ){
+
+			var _string= doc.strings().get( i );
+
+			console.log(_string);
+			var string = extractProperties( _group );
+
+			strings.push( string );
+
+			_string.delete();
+
+		}
+		*/
+
+		doc.delete();
+
+		return { objects, materials, layers, views, namedViews, groups, settings };
+
+	}
+
+	function extractObjectData( object, doc ) {
+
+		const _geometry = object.geometry();
+		const _attributes = object.attributes();
+		let objectType = _geometry.objectType;
+		let geometry, attributes, position, data, mesh;
+
+		// skip instance definition objects
+		//if( _attributes.isInstanceDefinitionObject ) { continue; }
+
+		// TODO: handle other geometry types
+		switch ( objectType ) {
+
+			case rhino.ObjectType.Curve:
+
+				const pts = curveToPoints( _geometry, 100 );
+
+				position = {};
+				attributes = {};
+				data = {};
+
+				position.itemSize = 3;
+				position.type = 'Float32Array';
+				position.array = [];
+
+				for ( let j = 0; j < pts.length; j ++ ) {
+
+					position.array.push( pts[ j ][ 0 ] );
+					position.array.push( pts[ j ][ 1 ] );
+					position.array.push( pts[ j ][ 2 ] );
+
+				}
+
+				attributes.position = position;
+				data.attributes = attributes;
+
+				geometry = { data };
+
+				break;
+
+			case rhino.ObjectType.Point:
+
+				const pt = _geometry.location;
+
+				position = {};
+				const color = {};
+				attributes = {};
+				data = {};
+
+				position.itemSize = 3;
+				position.type = 'Float32Array';
+				position.array = [ pt[ 0 ], pt[ 1 ], pt[ 2 ] ];
+
+				const _color = _attributes.drawColor( doc );
+
+				color.itemSize = 3;
+				color.type = 'Float32Array';
+				color.array = [ _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 ];
+
+				attributes.position = position;
+				attributes.color = color;
+				data.attributes = attributes;
+
+				geometry = { data };
+
+				break;
+
+			case rhino.ObjectType.PointSet:
+			case rhino.ObjectType.Mesh:
+
+				geometry = _geometry.toThreejsJSON();
+
+				break;
+
+			case rhino.ObjectType.Brep:
+
+				const faces = _geometry.faces();
+				mesh = new rhino.Mesh();
+
+				for ( let faceIndex = 0; faceIndex < faces.count; faceIndex ++ ) {
+
+					const face = faces.get( faceIndex );
+					const _mesh = face.getMesh( rhino.MeshType.Any );
+
+					if ( _mesh ) {
+
+						mesh.append( _mesh );
+						_mesh.delete();
+
+					}
+
+					face.delete();
+
+				}
+
+				if ( mesh.faces().count > 0 ) {
+
+					mesh.compact();
+					geometry = mesh.toThreejsJSON();
+					faces.delete();
+
+				}
+
+				mesh.delete();
+
+				break;
+
+			case rhino.ObjectType.Extrusion:
+
+				mesh = _geometry.getMesh( rhino.MeshType.Any );
+
+				if ( mesh ) {
+
+					geometry = mesh.toThreejsJSON();
+					mesh.delete();
+
+				}
+
+				break;
+
+			case rhino.ObjectType.TextDot:
+
+				geometry = extractProperties( _geometry );
+
+				break;
+
+			case rhino.ObjectType.Light:
+
+				geometry = extractProperties( _geometry );
+
+				break;
+
+			case rhino.ObjectType.InstanceReference:
+
+				geometry = extractProperties( _geometry );
+				geometry.xform = extractProperties( _geometry.xform );
+				geometry.xform.array = _geometry.xform.toFloatArray( true );
+
+				break;
+
+			case rhino.ObjectType.SubD:
+
+				// TODO: precalculate resulting vertices and faces and warn on excessive results
+				_geometry.subdivide( 3 );
+				mesh = rhino.Mesh.createFromSubDControlNet( _geometry );
+				if ( mesh ) {
+
+					geometry = mesh.toThreejsJSON();
+					mesh.delete();
+
+				}
+
+				break;
+
+				/*
+				case rhino.ObjectType.Annotation:
+				case rhino.ObjectType.Hatch:
+				case rhino.ObjectType.ClipPlane:
+				*/
+
+			default:
+				console.warn( `THREE.3DMLoader: TODO: Implement ${objectType.constructor.name}` );
+				break;
+
+		}
+
+		if ( geometry ) {
+
+			attributes = extractProperties( _attributes );
+			attributes.geometry = extractProperties( _geometry );
+
+			if ( _attributes.groupCount > 0 ) {
+
+				attributes.groupIds = _attributes.getGroupList();
+
+			}
+
+			if ( _attributes.userStringCount > 0 ) {
+
+				attributes.userStrings = _attributes.getUserStrings();
+
+			}
+
+			if ( _geometry.userStringCount > 0 ) {
+
+				attributes.geometry.userStrings = _geometry.getUserStrings();
+
+			}
+
+			attributes.drawColor = _attributes.drawColor( doc );
+
+			objectType = objectType.constructor.name;
+			objectType = objectType.substring( 11, objectType.length );
+
+			return { geometry, attributes, objectType };
+
+		} else {
+
+			console.warn( `THREE.3DMLoader: ${objectType.constructor.name} has no associated mesh geometry.` );
+
+		}
+
+	}
+
+	function extractProperties( object ) {
+
+		const result = {};
+
+		for ( const property in object ) {
+
+			const value = object[ property ];
+
+			if ( typeof value !== 'function' ) {
+
+				if ( typeof value === 'object' && value !== null && value.hasOwnProperty( 'constructor' ) ) {
+
+					result[ property ] = { name: value.constructor.name, value: value.value };
+
+				} else {
+
+					result[ property ] = value;
+
+				}
+
+			}
+
+		}
+
+		return result;
+
+	}
+
+	function curveToPoints( curve, pointLimit ) {
+
+		let pointCount = pointLimit;
+		let rc = [];
+		const ts = [];
+
+		if ( curve instanceof rhino.LineCurve ) {
+
+			return [ curve.pointAtStart, curve.pointAtEnd ];
+
+		}
+
+		if ( curve instanceof rhino.PolylineCurve ) {
+
+			pointCount = curve.pointCount;
+			for ( let i = 0; i < pointCount; i ++ ) {
+
+				rc.push( curve.point( i ) );
+
+			}
+
+			return rc;
+
+		}
+
+		if ( curve instanceof rhino.PolyCurve ) {
+
+			const segmentCount = curve.segmentCount;
+
+			for ( let i = 0; i < segmentCount; i ++ ) {
+
+				const segment = curve.segmentCurve( i );
+				const segmentArray = curveToPoints( segment, pointCount );
+				rc = rc.concat( segmentArray );
+				segment.delete();
+
+			}
+
+			return rc;
+
+		}
+
+		if ( curve instanceof rhino.ArcCurve ) {
+
+			pointCount = Math.floor( curve.angleDegrees / 5 );
+			pointCount = pointCount < 2 ? 2 : pointCount;
+			// alternative to this hardcoded version: https://stackoverflow.com/a/18499923/2179399
+
+		}
+
+		if ( curve instanceof rhino.NurbsCurve && curve.degree === 1 ) {
+
+			const pLine = curve.tryGetPolyline();
+
+			for ( let i = 0; i < pLine.count; i ++ ) {
+
+				rc.push( pLine.get( i ) );
+
+			}
+
+			pLine.delete();
+
+			return rc;
+
+		}
+
+		const domain = curve.domain;
+		const divisions = pointCount - 1.0;
+
+		for ( let j = 0; j < pointCount; j ++ ) {
+
+			const t = domain[ 0 ] + ( j / divisions ) * ( domain[ 1 ] - domain[ 0 ] );
+
+			if ( t === domain[ 0 ] || t === domain[ 1 ] ) {
+
+				ts.push( t );
+				continue;
+
+			}
+
+			const tan = curve.tangentAt( t );
+			const prevTan = curve.tangentAt( ts.slice( - 1 )[ 0 ] );
+
+			// Duplicated from THREE.Vector3
+			// How to pass imports to worker?
+
+			const tS = tan[ 0 ] * tan[ 0 ] + tan[ 1 ] * tan[ 1 ] + tan[ 2 ] * tan[ 2 ];
+			const ptS = prevTan[ 0 ] * prevTan[ 0 ] + prevTan[ 1 ] * prevTan[ 1 ] + prevTan[ 2 ] * prevTan[ 2 ];
+
+			const denominator = Math.sqrt( tS * ptS );
+
+			let angle;
+
+			if ( denominator === 0 ) {
+
+				angle = Math.PI / 2;
+
+			} else {
+
+				const theta = ( tan.x * prevTan.x + tan.y * prevTan.y + tan.z * prevTan.z ) / denominator;
+				angle = Math.acos( Math.max( - 1, Math.min( 1, theta ) ) );
+
+			}
+
+			if ( angle < 0.1 ) continue;
+
+			ts.push( t );
+
+		}
+
+		rc = ts.map( t => curve.pointAt( t ) );
+		return rc;
+
+	}
+
+}
+
 const scene = new Scene();
 scene.background = new Color(0xaaaaaa);
 
@@ -34998,16 +37657,33 @@ window.addEventListener("resize", () => {
     renderer.setSize(size.width, size.height);
 });
 
+const rhino3dmLoader = new Rhino3dmLoader();
+rhino3dmLoader.setLibraryPath("libs/rhino3dm");
+
 const ifcLoader = new IFCLoader();
-ifcLoader.setWasmPath("wasm/");
+ifcLoader.setWasmPath("libs/web-ifc/");
 
 const input = document.getElementById("file-input");
+
 input.addEventListener(
     "change",
     (changed) => {
-        var ifcURL = URL.createObjectURL(changed.target.files[0]);
-        console.log(ifcURL);
-        ifcLoader.load(ifcURL, (geometry) => scene.add(geometry));
+        var ext = getExt(input.files[0].name).toLowerCase();
+        var modelURL = URL.createObjectURL(changed.target.files[0]);
+
+        if (ext === "ifc") {
+            console.log(modelURL);
+            ifcLoader.load(modelURL, (geometry) => scene.add(geometry));
+        }
+        else if (ext === "3dm") {
+            rhino3dmLoader.load(modelURL, (geometry) => scene.add(geometry), false, false);
+        }
     },
     false
 );
+
+function getExt(filename) {
+    var pos = filename.lastIndexOf('.');
+    if (pos === -1) return '';
+    return filename.slice(pos + 1);
+}
