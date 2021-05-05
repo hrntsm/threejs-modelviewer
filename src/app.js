@@ -61,14 +61,14 @@ const animate = () => {
 animate();
 
 window.addEventListener("resize", () => {
-    (size.width = window.innerWidth), (size.height = window.innerHeight)
+    (size.width = window.innerWidth), (size.height = window.innerHeight);
     camera.aspect = size.width / size.height;
     camera.updateProjectionMatrix();
     renderer.setSize(size.width, size.height);
 });
 
 const rhino3dmLoader = new Rhino3dmLoader();
-rhino3dmLoader.setLibraryPath("libs/rhino3dm");
+rhino3dmLoader.setLibraryPath("libs/rhino3dm/");
 
 const ifcLoader = new IFCLoader();
 ifcLoader.setWasmPath("libs/web-ifc/");
@@ -86,6 +86,7 @@ input.addEventListener(
             ifcLoader.load(modelURL, (geometry) => scene.add(geometry));
         }
         else if (ext === "3dm") {
+            alert("NOTICE: This viewer is only support Mesh object in 3dm, not support like NURBS objects.");
             rhino3dmLoader.load(modelURL, (geometry) => scene.add(geometry), false, false);
         }
     },
