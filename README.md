@@ -1,6 +1,8 @@
 # threejs-modelviewer
 
-This is a model viewer that uses threejs. Check it out [here](https://hiron.dev/threejs-modelviewer/)!
+Threejs viewer to visualize ifc and rhino 3dm. Check it out [here](https://hiron.dev/threejs-modelviewer/)!
+
+Click [here](https://hiron.dev/articles/hello-ifcjs) for a summary of the contents.(Sorry, its Japanese)
 
 ## Support
 
