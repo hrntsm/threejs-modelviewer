@@ -41224,9 +41224,14 @@ input.addEventListener(
         }
         else if (ext === "3dm") {
             alert("NOTICE: This viewer is only supported Mesh object in 3dm, not support like NURBS objects.");
-            rhino3dmLoader.load(modelURL, function (objct) {
-                scene.add(objct);
-                initGUI(objct.userData.layers);
+            rhino3dmLoader.load(modelURL, function (object) {
+                object.traverse(function (child){
+                    // rotate to y-up
+                    child.rotateX(- Math.PI / 4);
+                });
+                scene.add(object);
+                console.log(object);
+                initGUI(object.userData.layers);
             });
         }
     },
