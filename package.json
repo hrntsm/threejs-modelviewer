@@ -4,21 +4,24 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "set NODE_ENV=production&&rollup --config",
+    "develop": "set NODE_ENV=development&&rollup -c -w -m"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/hrntsm/threejs-modelviewer.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "hrntsm",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/hrntsm/threejs-modelviewer/issues"
   },
   "homepage": "https://github.com/hrntsm/threejs-modelviewer#readme",
   "dependencies": {
     "rollup-plugin-node-resolve": "^5.2.0",
+    "rollup-plugin-terser": "^7.0.2",
     "three": "^0.128.0"
   }
 }
