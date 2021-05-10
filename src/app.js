@@ -79,7 +79,7 @@ input.addEventListener(
             ifcLoader.load(modelURL, (geometry) => scene.add(geometry));
         }
         else if (ext === "3dm") {
-            alert("NOTICE: This viewer is only supported Mesh object in 3dm, not support like NURBS objects.");
+            alert("NOTICE: This viewer is only supported Mesh objects in 3dm, not support other objects like NURBS.");
             rhino3dmLoader.load(modelURL, function (object) {
                 object.traverse(function (child){
                     // rotate to y-up
