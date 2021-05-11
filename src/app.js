@@ -3,7 +3,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { IFCLoader } from "three/examples/jsm/loaders/IFCLoader";
 import { Rhino3dmLoader } from "three/examples/jsm/loaders/3DMLoader";
 
-import { GUI } from "three/examples/jsm/libs/dat.gui.module";
+import { GUI as RhinoGUI } from "three/examples/jsm/libs/dat.gui.module";
+import { createSideMenuButton } from './gui/gui-creator';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xaaaaaa);
@@ -66,33 +67,7 @@ rhino3dmLoader.setLibraryPath("libs/rhino3dm/");
 const ifcLoader = new IFCLoader();
 ifcLoader.setWasmPath("libs/web-ifc/");
 
-const input = document.getElementById("file-input");
-
-input.addEventListener(
-    "change",
-    (changed) => {
-        var ext = getExt(input.files[0].name).toLowerCase();
-        var modelURL = URL.createObjectURL(changed.target.files[0]);
-
-        if (ext === "ifc") {
-            console.log(modelURL);
-            ifcLoader.load(modelURL, (geometry) => scene.add(geometry));
-        }
-        else if (ext === "3dm") {
-            alert("NOTICE: This viewer is only supported Mesh objects in 3dm, not support other objects like NURBS.");
-            rhino3dmLoader.load(modelURL, function (object) {
-                object.traverse(function (child){
-                    // rotate to y-up
-                    child.rotateX(- Math.PI / 4);
-                });
-                scene.add(object);
-                console.log(object);
-                initGUI(object.userData.layers);
-            });
-        }
-    },
-    false
-);
+setupModelReader();
 
 function getExt(filename) {
     var pos = filename.lastIndexOf('.');
@@ -101,7 +76,7 @@ function getExt(filename) {
 }
 
 function initGUI(layers) {
-    const gui = new GUI({ width: 300 });
+    const gui = new RhinoGUI({ width: 300 });
     const layersControl = gui.addFolder('layers');
     layersControl.open();
 
@@ -121,6 +96,47 @@ function initGUI(layers) {
                     }
                 }
             });
+        });
+    }
+}
+
+function setupModelReader() {
+    const inputElement = createInputElement();
+    const button = createSideMenuButton('./resources/file-add.svg');
+    button.addEventListener('click', () => {
+        button.blur();
+        inputElement.click();
+    });
+}
+
+function createInputElement() {
+    const inputElement = document.createElement('input');
+    inputElement.setAttribute('type', 'file');
+    inputElement.setAttribute('accept', '.ifc,.3dm');
+    inputElement.classList.add('hidden');
+    document.body.appendChild(inputElement);
+    inputElement.addEventListener('change', (event) => loadModel(event), false);
+    return inputElement;
+}
+
+function loadModel(event) {
+    var ext = getExt(event.target.files[0].name).toLowerCase();
+    var modelURL = URL.createObjectURL(event.target.files[0]);
+
+    if (ext === "ifc") {
+        console.log(modelURL);
+        ifcLoader.load(modelURL, (geometry) => scene.add(geometry));
+    }
+    else if (ext === "3dm") {
+        alert("NOTICE: This viewer is only supported Mesh objects in 3dm, not support other objects like NURBS.");
+        rhino3dmLoader.load(modelURL, function (object) {
+            object.traverse(function (child) {
+                // rotate to y-up
+                child.rotateX(- Math.PI / 4);
+            });
+            scene.add(object);
+            console.log(object);
+            initGUI(object.userData.layers);
         });
     }
 }
