@@ -7,6 +7,14 @@
     <title>Threejs Model Viewer</title>
   </head>
   <body>
+    <aside class="side-menu" id="side-menu-left">
+      <button class="basic-button">
+        <img src="./resources/file-add.svg" class="icon">
+      </button>
+      <button class="basic-button">
+        <img src="./resources/readme.svg" class="icon">
+      </button>
+    </aside>
     <input type="file" name="load" id="file-input" accept=".ifc,.3dm" />
     <canvas id="three-canvas"></canvas>
     <script src="bundle.js"></script>

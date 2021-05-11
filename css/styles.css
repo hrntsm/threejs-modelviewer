@@ -9,6 +9,37 @@ body {
   overflow: hidden;
 }
 
+.basic-button {
+  background-color: #8f8f8f;
+  width: 100%;
+  height: 40px;
+  border: none;
+  text-align: center;
+}
+
+.basic-button:hover {
+  background-color: #727272;
+}
+
+.icon {
+  max-width: 40px;
+  max-height: 40px;
+  margin: auto;
+}
+
+.side-menu {
+  z-index: 1;
+  position: fixed;
+  background-color: #36393f;
+  height: 100vh;
+}
+
+.side-sub-menu {
+  width: 100%;
+  height: inherit;
+  margin: 2px;
+}
+
 #three-canvas {
   position: fixed;
   top: 0;
@@ -19,4 +50,8 @@ body {
 #file-input {
   z-index: 1;
   position: absolute;
+}
+
+#side-menu-left {
+  width: 40px;
 }
