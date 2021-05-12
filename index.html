@@ -8,11 +8,33 @@
   </head>
   <body>
     <aside class="side-menu" id="side-menu-left">
-      <button class="basic-button">
-        <img src="./resources/readme.svg" class="icon">
+      <button class="basic-button" id="readme-btn">
+        <img src="./resources/readme.svg" class="icon" />
       </button>
     </aside>
     <canvas id="three-canvas"></canvas>
     <script src="bundle.js"></script>
+    <div id="modal" class="modal">
+      <div class="modal-contant">
+        <div class="modal-body">
+          <h1>hello</h1>
+          <input type="button" id="closeBtn" value="close" />
+        </div>
+      </div>
+    </div>
+    <script>
+      var btn = document.getElementById("readme-btn");
+      var modal = document.getElementById("modal");
+
+      btn.addEventListener("click", function () {
+        modal.style.display = "block";
+      });
+      
+      var closeBtn = document.getElementById("closeBtn");
+
+      closeBtn.addEventListener("click", function () {
+        modal.style.display = "none";
+      });
+    </script>
   </body>
 </html>
