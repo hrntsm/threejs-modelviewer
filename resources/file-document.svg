@@ -5,7 +5,9 @@
   fill="none"
   xmlns="http://www.w3.org/2000/svg"
 >
-  <path d="M10 18V16H8V14H10V12H12V14H14V16H12V18H10Z" fill="currentColor" />
+  <path d="M7 18H17V16H7V18Z" fill="currentColor" />
+  <path d="M17 14H7V12H17V14Z" fill="currentColor" />
+  <path d="M7 10H11V8H7V10Z" fill="currentColor" />
   <path
     fill-rule="evenodd"
     clip-rule="evenodd"
