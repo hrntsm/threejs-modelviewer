@@ -102,7 +102,7 @@ function initGUI(layers) {
 
 function setupModelReader() {
     const inputElement = createInputElement();
-    const button = createSideMenuButton('./resources/file-add.svg');
+    const button = createSideMenuButton('./resources/file-document.svg');
     button.addEventListener('click', () => {
         button.blur();
         inputElement.click();

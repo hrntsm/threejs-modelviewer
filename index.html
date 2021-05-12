@@ -15,10 +15,17 @@
     <canvas id="three-canvas"></canvas>
     <script src="bundle.js"></script>
     <div id="modal" class="modal">
-      <div class="modal-contant">
+      <div class="modal-content">
         <div class="modal-body">
-          <h1>hello</h1>
-          <input type="button" id="closeBtn" value="close" />
+          <h1>Threejs Model Viewer</h1>
+          <h2>使い方</h2>
+          <p>左のサイドバーから対象ファイルを読み込むことで画面にモデルが表示されます。</p>
+          </br>
+          <h2>対応フォーマット</h2>
+          <ul class="list-indent">
+            <li>Rhinoceros の 3DM ファイル（メッシュのみ）</li>
+            <li>BIM ファイルフォーマット IFC ファイル</li>
+          </ul>
         </div>
       </div>
     </div>
@@ -27,12 +34,10 @@
       var modal = document.getElementById("modal");
 
       btn.addEventListener("click", function () {
-        modal.style.display = "block";
+        modal.style.display = "flex";
       });
       
-      var closeBtn = document.getElementById("closeBtn");
-
-      closeBtn.addEventListener("click", function () {
+      modal.addEventListener("click", function () {
         modal.style.display = "none";
       });
     </script>
