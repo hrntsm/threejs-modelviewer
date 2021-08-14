@@ -15,19 +15,19 @@ export function setupScene() {
         height: window.innerHeight,
     };
 
-    const camera = new THREE.PerspectiveCamera(75, size.width / size.height);
+    const camera = new THREE.PerspectiveCamera(75, size.width / size.height, 0.1, 100000);
     camera.position.z = 15;
     camera.position.y = 15;
     camera.position.x = 15;
 
     const lightColor = 0xffffff;
 
-    const ambientLight = new THREE.AmbientLight(lightColor, 0.5);
+    const ambientLight = new THREE.AmbientLight(lightColor, 2);
     scene.add(ambientLight);
 
     const directionalLight = new THREE.DirectionalLight(lightColor, 1);
-    directionalLight.position.set(0, 10, 0);
-    directionalLight.target.position.set(-5, 0, 0);
+    directionalLight.position.set(100, 100, 100);
+    directionalLight.target.position.set(0, 0, 0);
     scene.add(directionalLight);
     scene.add(directionalLight.target);
 
